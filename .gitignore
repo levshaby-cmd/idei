@@ -1,0 +1,6 @@
+serve.py
+открыть на компьютере.bat
+icons/app.ico
+__pycache__/
+*.pyc
+.DS_Store

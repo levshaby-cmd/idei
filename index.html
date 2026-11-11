@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#F3EDE3" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#12100D" media="(prefers-color-scheme: dark)">
+  <meta name="description" content="Наговорите идею — текст сохранится, и его можно скопировать.">
+  <title>Идеи — голосовой блокнот</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="fonts.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="page">
+    <header class="top">
+      <div class="top__text">
+        <p class="eyebrow">Голосовой блокнот</p>
+        <h1>Идеи</h1>
+        <p class="count" id="count" aria-live="polite"></p>
+      </div>
+      <button class="icon-btn" id="menuBtn" type="button" aria-label="Ещё" aria-haspopup="dialog">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="5" cy="12" r="1.5" fill="currentColor"/>
+          <circle cx="12" cy="12" r="1.5" fill="currentColor"/>
+          <circle cx="19" cy="12" r="1.5" fill="currentColor"/>
+        </svg>
+      </button>
+    </header>
+
+    <div class="banner" id="supportBanner" hidden></div>
+
+    <main>
+      <section class="empty" id="empty" hidden>
+        <span class="empty__mark" aria-hidden="true">“</span>
+        <h2>Здесь появятся ваши идеи</h2>
+        <p>Нажмите «Говорить» и расскажите, что придумали. Текст сохранится сам — останется только скопировать.</p>
+        <p class="empty__hint">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/><path d="M8 21h8"/></svg>
+          Говорите с паузами — можно
+        </p>
+      </section>
+
+      <section class="notes" id="notes" aria-label="Сохранённые идеи"></section>
+
+      <p class="foot">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+        Записи хранятся только на этом телефоне
+      </p>
+    </main>
+  </div>
+
+  <section class="recording" id="recording" aria-label="Текущая запись" hidden>
+    <div class="recording__top">
+      <span class="rec-dot" aria-hidden="true"></span>
+      <span>Идёт запись</span>
+      <span class="rec-time" id="recTime">00:00</span>
+    </div>
+    <div class="recording__text" id="liveText"></div>
+    <p class="recording__hint">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M10 18h4"/></svg>
+      Не выключайте экран и не сворачивайте приложение
+    </p>
+  </section>
+
+  <div class="dock">
+    <button class="mic" id="micBtn" type="button" aria-label="Начать запись">
+      <svg class="mic__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="9" y="2.5" width="6" height="11" rx="3"/>
+        <path d="M5.5 11a6.5 6.5 0 0 0 13 0"/>
+        <path d="M12 17.5V21"/>
+        <path d="M8.5 21h7"/>
+      </svg>
+      <svg class="mic__stop" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <rect x="7" y="7" width="10" height="10" rx="2.2"/>
+      </svg>
+    </button>
+    <p class="dock__label" id="dockLabel">Нажмите и говорите</p>
+  </div>
+
+  <div class="toast" id="toast" role="status">
+    <span id="toastText"></span>
+    <button class="toast__action" id="toastAction" type="button" hidden></button>
+  </div>
+
+  <dialog class="sheet" id="menuDialog" aria-labelledby="menuTitle">
+    <div class="sheet__inner">
+      <div class="sheet__handle" aria-hidden="true"></div>
+      <h2 id="menuTitle">Ещё</h2>
+      <p>Ваши идеи — только на этом телефоне.</p>
+      <div class="sheet__list">
+        <button class="sheet-btn" id="installBtn" type="button" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M12 6v8"/><path d="m8.5 10.5 3.5 3.5 3.5-3.5"/><path d="M10 18h4"/></svg>
+          Добавить на главный экран
+        </button>
+        <button class="sheet-btn" id="copyAllBtn" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg>
+          Скопировать все идеи
+        </button>
+        <button class="sheet-btn" id="downloadBtn" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 20h16"/></svg>
+          Скачать все идеи
+          <span class="sheet-btn__sub">.txt</span>
+        </button>
+        <button class="sheet-btn" id="helpBtn" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.6 9a2.6 2.6 0 0 1 5 .9c0 1.7-2.4 2-2.4 3.6"/><path d="M12 17.2h.01"/></svg>
+          Как это работает
+        </button>
+        <button class="sheet-btn sheet-btn--danger" id="clearBtn" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+          Удалить все идеи
+        </button>
+      </div>
+      <button class="sheet__close" type="button" data-close>Закрыть</button>
+    </div>
+  </dialog>
+
+  <dialog class="sheet" id="helpDialog" aria-labelledby="helpTitle">
+    <div class="sheet__inner">
+      <div class="sheet__handle" aria-hidden="true"></div>
+      <h2 id="helpTitle">Как это работает</h2>
+      <p>Четыре простых шага.</p>
+      <div class="help">
+        <div class="help-step"><span class="help-step__n">1</span><p>Нажмите большую круглую кнопку внизу.</p></div>
+        <div class="help-step"><span class="help-step__n">2</span><p>Скажите идею. Можно с паузами — запись не остановится.</p></div>
+        <div class="help-step"><span class="help-step__n">3</span><p>Нажмите «Стоп». Текст сохранится в списке с датой.</p></div>
+        <div class="help-step"><span class="help-step__n">4</span><p>Нажмите «Копировать» и вставьте текст куда нужно.</p></div>
+      </div>
+      <p class="help-note">Если распознало с ошибкой — нажмите «Изменить» и поправьте текст. Записи хранятся в памяти браузера: если очистить данные Chrome, они исчезнут. Важные идеи лучше скачивать.</p>
+      <button class="sheet__close" type="button" data-close>Понятно</button>
+    </div>
+  </dialog>
+
+  <noscript>
+    <div class="banner">Для работы этой страницы нужен включённый JavaScript.</div>
+  </noscript>
+
+  <script src="app.js"></script>
+</body>
+</html>
