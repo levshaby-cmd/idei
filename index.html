@@ -56,7 +56,7 @@
   <section class="recording" id="recording" aria-label="Текущая запись" hidden>
     <div class="recording__top">
       <span class="rec-dot" aria-hidden="true"></span>
-      <span>Идёт запись</span>
+      <span id="recStatus">Идёт запись</span>
       <span class="rec-time" id="recTime">00:00</span>
     </div>
     <div class="recording__text" id="liveText"></div>
@@ -92,6 +92,13 @@
       <h2 id="menuTitle">Ещё</h2>
       <p>Ваши идеи — только на этом телефоне.</p>
       <div class="sheet__list">
+        <label class="sheet-toggle">
+          <span class="sheet-toggle__text">
+            <span class="sheet-toggle__title">Тихий режим</span>
+            <span class="sheet-toggle__sub" id="quietToggleSub">Без писка · текст после «Стоп»</span>
+          </span>
+          <input type="checkbox" id="quietToggle" checked>
+        </label>
         <button class="sheet-btn" id="installBtn" type="button" hidden>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M12 6v8"/><path d="m8.5 10.5 3.5 3.5 3.5-3.5"/><path d="M10 18h4"/></svg>
           Добавить на главный экран
@@ -126,11 +133,28 @@
       <div class="help">
         <div class="help-step"><span class="help-step__n">1</span><p>Нажмите большую круглую кнопку внизу.</p></div>
         <div class="help-step"><span class="help-step__n">2</span><p>Скажите идею. Можно с паузами — запись не остановится.</p></div>
-        <div class="help-step"><span class="help-step__n">3</span><p>Нажмите «Стоп». Текст сохранится в списке с датой.</p></div>
+        <div class="help-step"><span class="help-step__n">3</span><p>Нажмите «Стоп». Приложение распознает речь и сохранит текст в списке с датой.</p></div>
         <div class="help-step"><span class="help-step__n">4</span><p>Нажмите «Копировать» и вставьте текст куда нужно.</p></div>
       </div>
+      <p class="help-note">В тихом режиме первый раз скачивается модель распознавания — около 230 МБ. Это один раз, потом интернет не нужен. Звук никуда не отправляется: распознавание идёт прямо на телефоне. Текст появляется после «Стоп». Обычный режим можно включить в меню «Ещё».</p>
       <p class="help-note">Если распознало с ошибкой — нажмите «Изменить» и поправьте текст. Записи хранятся в памяти браузера: если очистить данные Chrome, они исчезнут. Важные идеи лучше скачивать.</p>
       <button class="sheet__close" type="button" data-close>Понятно</button>
+    </div>
+  </dialog>
+
+  <dialog class="sheet" id="downloadDialog" aria-labelledby="downloadTitle">
+    <div class="sheet__inner">
+      <div class="sheet__handle" aria-hidden="true"></div>
+      <h2 id="downloadTitle">Нужна модель распознавания</h2>
+      <p id="downloadText">Первый раз скачается модель около 230 МБ. Это один раз. Потом распознавание работает без интернета. Лучше по Wi-Fi. Звук никуда не отправляется — всё работает на телефоне.</p>
+      <div class="download-progress" id="downloadProgress" hidden>
+        <div class="download-progress__track"><span class="download-progress__bar" id="downloadBar"></span></div>
+        <p class="download-progress__text" id="downloadPercent"></p>
+      </div>
+      <div class="sheet__actions">
+        <button class="btn btn--primary" id="downloadStartBtn" type="button">Скачать модель</button>
+        <button class="sheet__close sheet__close--in-actions" id="downloadCancelBtn" type="button">Позже</button>
+      </div>
     </div>
   </dialog>
 

@@ -893,6 +893,119 @@ dialog.sheet::backdrop {
   font-size: 12.5px !important;
 }
 
+.help-note + .help-note {
+  margin-top: 8px;
+}
+
+/* ============================================================
+   Переключатель и загрузка модели
+   ============================================================ */
+
+.sheet-toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 2px;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+}
+
+.sheet-toggle__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.sheet-toggle__title {
+  color: var(--ink);
+  font-size: 14.5px;
+}
+
+.sheet-toggle__sub {
+  color: var(--ink-faint);
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+
+.sheet-toggle input {
+  position: relative;
+  width: 46px;
+  height: 28px;
+  flex: none;
+  margin: 0 0 0 auto;
+  border: 0;
+  border-radius: 999px;
+  background: var(--line);
+  cursor: pointer;
+  appearance: none;
+  transition: background 0.2s;
+}
+
+.sheet-toggle input::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--paper-2);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s;
+}
+
+.sheet-toggle input:checked {
+  background: var(--accent);
+}
+
+.sheet-toggle input:checked::after {
+  transform: translateX(18px);
+}
+
+.download-progress {
+  margin: 4px 0 16px;
+}
+
+.download-progress__track {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--line);
+}
+
+.download-progress__bar {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
+
+.download-progress__text {
+  margin: 8px 0 0 !important;
+  color: var(--ink-faint) !important;
+  font-size: 12px !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.sheet__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sheet__actions .btn {
+  width: 100%;
+  min-height: 46px;
+  font-size: 14px;
+}
+
+.sheet__close--in-actions {
+  margin-top: 0;
+}
+
 /* ============================================================
    Анимации
    ============================================================ */
