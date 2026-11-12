@@ -683,6 +683,23 @@ body.recording .dock__label {
   flex: none;
 }
 
+.recording__cancel {
+  display: block;
+  margin: 14px auto 0;
+  padding: 9px 16px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.recording__cancel:hover {
+  color: var(--ink);
+  background: var(--accent-soft);
+}
+
 /* ============================================================
    Уведомление
    ============================================================ */
@@ -988,6 +1005,35 @@ dialog.sheet::backdrop {
   color: var(--ink-faint) !important;
   font-size: 12px !important;
   font-variant-numeric: tabular-nums;
+}
+
+.server-field {
+  display: block;
+  margin: 16px 0 6px;
+}
+
+.server-field__label {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.server-field__input {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-mono, Consolas, monospace);
+  font-size: 12.5px;
+}
+
+.server-field__input:focus {
+  outline: 2px solid var(--accent-soft);
+  border-color: var(--accent);
 }
 
 .sheet__actions {

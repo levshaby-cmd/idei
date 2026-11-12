@@ -34,6 +34,15 @@
     supportBanner: document.getElementById('supportBanner'),
     quietToggle: document.getElementById('quietToggle'),
     quietToggleSub: document.getElementById('quietToggleSub'),
+    serverBtn: document.getElementById('serverBtn'),
+    serverBtnSub: document.getElementById('serverBtnSub'),
+    serverDialog: document.getElementById('serverDialog'),
+    serverStatusText: document.getElementById('serverStatusText'),
+    serverUrlInput: document.getElementById('serverUrlInput'),
+    serverSaveBtn: document.getElementById('serverSaveBtn'),
+    serverForgetBtn: document.getElementById('serverForgetBtn'),
+    serverCheckBtn: document.getElementById('serverCheckBtn'),
+    cancelTranscribeBtn: document.getElementById('cancelTranscribeBtn'),
     downloadDialog: document.getElementById('downloadDialog'),
     downloadText: document.getElementById('downloadText'),
     downloadProgress: document.getElementById('downloadProgress'),
@@ -80,6 +89,15 @@
   const QUIET_MODEL_URL = QUIET_MODEL_BASE + 'v3_e2e_ctc.int8.onnx';
   const QUIET_MODEL_CACHE = 'asr-model-v1';
   const QUIET_MODEL_BYTES = 230 * 1024 * 1024;
+  const SERVER_URL_KEY = 'voice-ideas.server';
+
+  let serverUrl = loadServerUrl();
+  let serverAvailable = null;
+  let transcribeCancelled = false;
+  let activeTranscribeAbort = null;
+  let transcribeTicker = null;
+  let transcribeBaseStatus = 'Распознаю…';
+  let transcribeStartedAt = 0;
 
   let quietEnabled = localStorage.getItem(QUIET_MODE_KEY) !== '0';
   let quietWorker = null;
@@ -963,6 +981,40 @@
     hideDownloadDialog();
   }
 
+  async function ensureQuietModel() {
+    const cached = await hasQuietModel();
+    if (!cached) {
+      const approved = await askDownloadConsent();
+      if (!approved) {
+        hideDownloadDialog();
+        setDockLabel('Нажмите и говорите');
+        return false;
+      }
+      setDockLabel('Скачиваю модель…');
+      try {
+        await downloadQuietModel(updateDownloadProgress);
+      } catch (err) {
+        hideDownloadDialog();
+        setDockLabel('Нажмите и говорите');
+        if (err && err.name === 'AbortError') return false;
+        console.warn('[asr] download:', err);
+        const message =
+          err && err.message === 'storage'
+            ? 'На телефоне мало свободного места'
+            : 'Не удалось скачать модель';
+        showToast(message, 'Повторить', () => {
+          startQuietRecording();
+        });
+        return false;
+      }
+      hideDownloadDialog();
+    }
+
+    setDockLabel('Готовлю распознавание…');
+    await initQuietWorker();
+    return true;
+  }
+
   async function startQuietRecording() {
     if (quietPreparing || isRecording || isFinishing) return;
     quietPreparing = true;
@@ -978,38 +1030,21 @@
         throw new Error('unsupported');
       }
 
-      const cached = await hasQuietModel();
-      if (!cached) {
-        const approved = await askDownloadConsent();
-        if (!approved) {
-          hideDownloadDialog();
-          return;
-        }
-        setDockLabel('Скачиваю модель…');
-        try {
-          await downloadQuietModel(updateDownloadProgress);
-        } catch (err) {
-          hideDownloadDialog();
-          if (err && err.name === 'AbortError') {
-            setDockLabel('Нажмите и говорите');
-            return;
-          }
-          console.warn('[asr] download:', err);
-          const message =
-            err && err.message === 'storage'
-              ? 'На телефоне мало свободного места'
-              : 'Не удалось скачать модель';
-          setDockLabel('Нажмите и говорите');
-          showToast(message, 'Повторить', () => {
-            startQuietRecording();
-          });
-          return;
-        }
-        hideDownloadDialog();
+      const tryServer = quietEnabled && !!serverUrl;
+      let useServer = false;
+      if (tryServer) {
+        setDockLabel('Проверяю компьютер…');
+        const health = await checkServerHealth(1500);
+        serverAvailable = health.ok;
+        updateServerUi();
+        useServer = health.ok;
       }
 
-      setDockLabel('Готовлю распознавание…');
-      await initQuietWorker();
+      if (!useServer) {
+        const ready = await ensureQuietModel();
+        if (!ready) return;
+      }
+
       await beginQuietRecording();
     } catch (err) {
       console.warn('[asr] start:', err);
@@ -1270,18 +1305,57 @@
     runQuietTranscription(blob, interrupted);
   }
 
+  function setQuietTranscribeStatus(text) {
+    transcribeBaseStatus = text;
+    if (els.recStatus) els.recStatus.textContent = transcribeStatusWithElapsed();
+    if (els.liveText) {
+      els.liveText.textContent = '';
+      const span = document.createElement('span');
+      span.className = 'live-placeholder';
+      span.textContent = text + ' Не закрывайте приложение';
+      els.liveText.appendChild(span);
+    }
+  }
+
+  function transcribeStatusWithElapsed() {
+    if (!transcribeStartedAt) return transcribeBaseStatus;
+    const total = Math.max(0, Math.floor((Date.now() - transcribeStartedAt) / 1000));
+    const minutes = Math.floor(total / 60);
+    const seconds = total % 60;
+    return `${transcribeBaseStatus} ${minutes}:${String(seconds).padStart(2, '0')}`;
+  }
+
+  function startTranscribeTicker() {
+    stopTranscribeTicker();
+    transcribeStartedAt = Date.now();
+    transcribeTicker = setInterval(() => {
+      if (els.recStatus) els.recStatus.textContent = transcribeStatusWithElapsed();
+    }, 1000);
+  }
+
+  function stopTranscribeTicker() {
+    if (transcribeTicker) clearInterval(transcribeTicker);
+    transcribeTicker = null;
+    transcribeStartedAt = 0;
+  }
+
   function showQuietTranscribingUi() {
     document.body.classList.add('recording');
     els.recording.hidden = false;
-    setRecordingStatus('Распознаю…');
+    transcribeBaseStatus = 'Распознаю…';
+    setRecordingStatus(transcribeBaseStatus);
     setDockLabel('Распознаю…');
     els.liveText.innerHTML =
       '<span class="live-placeholder">Распознаю… Не закрывайте приложение</span>';
     els.micBtn.disabled = true;
     els.micBtn.setAttribute('aria-label', 'Начать запись');
+    if (els.cancelTranscribeBtn) els.cancelTranscribeBtn.hidden = false;
+    startTranscribeTicker();
   }
 
   function finishQuietUi() {
+    stopTranscribeTicker();
+    if (els.cancelTranscribeBtn) els.cancelTranscribeBtn.hidden = true;
     document.body.classList.remove('recording');
     els.recording.hidden = true;
     els.liveText.textContent = '';
@@ -1302,13 +1376,395 @@
     quietStream = null;
   }
 
+  /* ---------- распознавание на компьютере ---------- */
+
+  function normalizeServerUrl(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    let parsed;
+    try {
+      parsed = new URL(raw);
+    } catch (_) {
+      return '';
+    }
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return '';
+    // Обычный http разрешаем только для проверки на самом компьютере.
+    if (
+      parsed.protocol === 'http:' &&
+      !['127.0.0.1', 'localhost', '::1'].includes(parsed.hostname)
+    ) {
+      return '';
+    }
+    if (parsed.username || parsed.password) return '';
+    const path = parsed.pathname.replace(/\/+$/, '');
+    return parsed.protocol + '//' + parsed.host + path;
+  }
+
+  function loadServerUrl() {
+    try {
+      return normalizeServerUrl(localStorage.getItem(SERVER_URL_KEY) || '');
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function saveServerUrl(value) {
+    serverUrl = normalizeServerUrl(value);
+    try {
+      if (serverUrl) localStorage.setItem(SERVER_URL_KEY, serverUrl);
+      else localStorage.removeItem(SERVER_URL_KEY);
+    } catch (_) {
+      /* память недоступна */
+    }
+    updateServerUi();
+  }
+
+  function applyServerFromQuery() {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (!params.has('server')) return;
+      const raw = params.get('server') || '';
+      if (raw === 'off') {
+        saveServerUrl('');
+      } else {
+        const normalized = normalizeServerUrl(raw);
+        if (normalized) saveServerUrl(normalized);
+      }
+      params.delete('server');
+      const query = params.toString();
+      const clean =
+        window.location.pathname + (query ? '?' + query : '') + window.location.hash;
+      window.history.replaceState(null, '', clean);
+    } catch (_) {
+      /* не страшно */
+    }
+  }
+
+  function updateServerUi() {
+    if (els.serverBtnSub) {
+      if (!serverUrl) els.serverBtnSub.textContent = 'Не настроен';
+      else if (!quietEnabled) els.serverBtnSub.textContent = 'Только в тихом режиме';
+      else if (serverAvailable === true) els.serverBtnSub.textContent = 'Доступен · быстро';
+      else if (serverAvailable === false) els.serverBtnSub.textContent = 'Не отвечает · на телефоне';
+      else els.serverBtnSub.textContent = 'Проверить';
+    }
+    updateServerStatusTextFromState();
+  }
+
+  function updateServerStatusTextFromState() {
+    if (!els.serverStatusText) return;
+    if (!serverUrl) {
+      els.serverStatusText.textContent =
+        'Компьютер не настроен. Приложение распознаёт записи на телефоне.';
+    } else if (!quietEnabled) {
+      els.serverStatusText.textContent =
+        'Компьютер работает только в тихом режиме. Включите его в меню «Ещё».';
+    } else if (serverAvailable === true) {
+      els.serverStatusText.textContent =
+        'Компьютер отвечает. Записи будут распознаваться на нём — быстро.';
+    } else if (serverAvailable === false) {
+      els.serverStatusText.textContent =
+        'Компьютер сейчас не отвечает. Приложение распознает запись на телефоне — медленнее, но надёжно.';
+    } else {
+      els.serverStatusText.textContent = 'Проверяю связь с компьютером…';
+    }
+  }
+
+  async function checkServerHealth(timeoutMs = 2500) {
+    if (!serverUrl) return { ok: false, reason: 'not-configured' };
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(serverUrl + '/health', {
+        cache: 'no-store',
+        signal: controller.signal,
+        headers: { 'Bypass-Tunnel-Reminder': 'true' },
+      });
+      if (!response.ok) return { ok: false, reason: 'http-' + response.status };
+      const data = await response.json();
+      if (!data || !data.ok) return { ok: false, reason: 'bad-response' };
+      return { ok: true, data };
+    } catch (err) {
+      return {
+        ok: false,
+        reason: err && err.name === 'AbortError' ? 'timeout' : 'network',
+      };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async function refreshServerStatus(timeoutMs = 2500) {
+    updateServerStatusTextFromState();
+    if (!serverUrl || !quietEnabled) {
+      updateServerUi();
+      return false;
+    }
+    if (els.serverBtnSub) els.serverBtnSub.textContent = 'Проверяю…';
+    const result = await checkServerHealth(timeoutMs);
+    serverAvailable = result.ok;
+    updateServerUi();
+    return result.ok;
+  }
+
+  function waitForServerJob(jobId) {
+    return new Promise((resolve, reject) => {
+      const started = Date.now();
+      let cancelled = false;
+      let failures = 0;
+      let pollController = null;
+
+      const cleanup = () => {
+        activeTranscribeAbort = null;
+        if (pollController) {
+          try {
+            pollController.abort();
+          } catch (_) {
+            /* уже завершён */
+          }
+        }
+      };
+
+      const abort = () => {
+        cancelled = true;
+        if (pollController) {
+          try {
+            pollController.abort();
+          } catch (_) {
+            /* уже завершён */
+          }
+        }
+      };
+      activeTranscribeAbort = { abort };
+
+      const tick = async () => {
+        if (cancelled || transcribeCancelled) {
+          cleanup();
+          reject(new Error('cancelled'));
+          return;
+        }
+        if (Date.now() - started > 30 * 60 * 1000) {
+          cleanup();
+          reject(new Error('timeout'));
+          return;
+        }
+
+        pollController = new AbortController();
+        const timer = setTimeout(() => {
+          try {
+            pollController.abort();
+          } catch (_) {
+            /* уже завершён */
+          }
+        }, 10000);
+
+        try {
+          const response = await fetch(
+            serverUrl + '/result/' + encodeURIComponent(jobId),
+            {
+              cache: 'no-store',
+              signal: pollController.signal,
+              headers: { 'Bypass-Tunnel-Reminder': 'true' },
+            }
+          );
+          clearTimeout(timer);
+          if (!response.ok) throw new Error('HTTP ' + response.status);
+          const data = await response.json();
+          failures = 0;
+
+          if (data && data.status === 'done') {
+            cleanup();
+            resolve(data.text || '');
+            return;
+          }
+          if (data && (data.status === 'error' || data.ok === false)) {
+            cleanup();
+            reject(new Error((data && data.error) || 'server error'));
+            return;
+          }
+          if (cancelled || transcribeCancelled) {
+            cleanup();
+            reject(new Error('cancelled'));
+            return;
+          }
+          setTimeout(tick, 1000);
+        } catch (err) {
+          clearTimeout(timer);
+          if (cancelled || transcribeCancelled) {
+            cleanup();
+            reject(new Error('cancelled'));
+            return;
+          }
+          failures += 1;
+          if (failures >= 5) {
+            cleanup();
+            reject(err);
+            return;
+          }
+          setTimeout(tick, 1200);
+        }
+      };
+
+      tick();
+    });
+  }
+
+  function transcribeOnServer(blob) {
+    return new Promise((resolve, reject) => {
+      if (transcribeCancelled) {
+        reject(new Error('cancelled'));
+        return;
+      }
+      const xhr = new XMLHttpRequest();
+      activeTranscribeAbort = { abort: () => xhr.abort() };
+      xhr.open('POST', serverUrl + '/transcribe', true);
+      xhr.setRequestHeader('Content-Type', blob.type || 'audio/webm');
+      xhr.setRequestHeader('Bypass-Tunnel-Reminder', 'true');
+      xhr.timeout = 30 * 60 * 1000;
+      xhr.upload.onprogress = (event) => {
+        if (!event.lengthComputable || !event.total) return;
+        const percent = Math.min(99, Math.round((event.loaded / event.total) * 100));
+        setQuietTranscribeStatus(`Отправляю на компьютер… ${percent}%`);
+      };
+      xhr.upload.onload = () => {
+        setQuietTranscribeStatus('Распознаю на компьютере…');
+      };
+      xhr.onload = () => {
+        if (xhr.status < 200 || xhr.status >= 300) {
+          activeTranscribeAbort = null;
+          reject(new Error('HTTP ' + xhr.status));
+          return;
+        }
+        let data;
+        try {
+          data = JSON.parse(xhr.responseText || '{}');
+        } catch (err) {
+          activeTranscribeAbort = null;
+          reject(err);
+          return;
+        }
+        if (!data || !data.ok || !data.job_id) {
+          activeTranscribeAbort = null;
+          reject(new Error((data && data.error) || 'bad response'));
+          return;
+        }
+        setQuietTranscribeStatus('Распознаю на компьютере…');
+        waitForServerJob(data.job_id).then(resolve, reject);
+      };
+      xhr.onerror = () => {
+        activeTranscribeAbort = null;
+        reject(new Error('network'));
+      };
+      xhr.ontimeout = () => {
+        activeTranscribeAbort = null;
+        reject(new Error('timeout'));
+      };
+      xhr.onabort = () => {
+        activeTranscribeAbort = null;
+        reject(new Error('cancelled'));
+      };
+      xhr.send(blob);
+    });
+  }
+
+  function isCancelledError(err) {
+    return !!err && (err.name === 'AbortError' || err.message === 'cancelled');
+  }
+
+  function cancelTranscription() {
+    if (!isFinishing) return;
+    transcribeCancelled = true;
+    if (els.cancelTranscribeBtn) els.cancelTranscribeBtn.hidden = true;
+    setQuietTranscribeStatus('Отменяю…');
+    stopTranscribeTicker();
+    if (activeTranscribeAbort) {
+      try {
+        activeTranscribeAbort.abort();
+      } catch (_) {
+        /* уже завершилось */
+      }
+      activeTranscribeAbort = null;
+    }
+    if (quietDownloadController) {
+      try {
+        quietDownloadController.abort();
+      } catch (_) {
+        /* уже завершилось */
+      }
+    }
+    if (quietWorker) {
+      try {
+        quietWorker.terminate();
+      } catch (_) {
+        /* уже завершён */
+      }
+      quietWorker = null;
+      quietWorkerReady = false;
+      quietInitPromise = null;
+    }
+    if (quietTranscribeReject) {
+      const reject = quietTranscribeReject;
+      quietTranscribeResolve = null;
+      quietTranscribeReject = null;
+      reject(new Error('cancelled'));
+    }
+    if (quietInitReject) {
+      const reject = quietInitReject;
+      quietInitResolve = null;
+      quietInitReject = null;
+      reject(new Error('cancelled'));
+    }
+  }
+
   async function runQuietTranscription(blob, interrupted) {
     if (isFinishing) return;
     isFinishing = true;
     manualStop = true;
+    transcribeCancelled = false;
+    activeTranscribeAbort = null;
     showQuietTranscribingUi();
+    const tryServer = quietEnabled && !!serverUrl;
+    setQuietTranscribeStatus(
+      tryServer ? 'Проверяю компьютер…' : 'Распознаю на телефоне…'
+    );
+    let text = '';
+    let source = 'phone';
     try {
-      const text = await transcribeQuietBlob(blob);
+      if (tryServer) {
+        const health = await checkServerHealth(1500);
+        if (transcribeCancelled) throw new Error('cancelled');
+        serverAvailable = health.ok;
+        updateServerUi();
+        if (health.ok) {
+          source = 'pc';
+          setQuietTranscribeStatus('Отправляю на компьютер…');
+          try {
+            text = await transcribeOnServer(blob);
+          } catch (err) {
+            if (transcribeCancelled || isCancelledError(err)) throw err;
+            console.warn('[asr] server:', err);
+            source = 'phone';
+            text = '';
+            setQuietTranscribeStatus('Компьютер не ответил — распознаю на телефоне…');
+            showToast('Компьютер не ответил — распознаю на телефоне');
+          }
+        } else {
+          console.info('[asr] компьютер недоступен:', health.reason);
+          setQuietTranscribeStatus('Компьютер недоступен — распознаю на телефоне…');
+        }
+      }
+      if (!text) {
+        if (transcribeCancelled) throw new Error('cancelled');
+        source = 'phone';
+        setQuietTranscribeStatus('Готовлю распознавание на телефоне…');
+        const ready = await ensureQuietModel();
+        if (!ready) throw new Error('cancelled');
+        if (transcribeCancelled) throw new Error('cancelled');
+        setDockLabel('Распознаю…');
+        setQuietTranscribeStatus('Распознаю на телефоне…');
+        text = await transcribeQuietBlob(blob);
+      }
+      if (transcribeCancelled) throw new Error('cancelled');
       const normalized = normalizeNote(text);
       if (normalized) {
         addNoteFromText(normalized);
@@ -1321,7 +1777,11 @@
             pendingVisibilityMessage = '';
           }
         } else {
-          showToast('Идея сохранена');
+          showToast(
+            source === 'pc'
+              ? 'Идея сохранена · распознал компьютер'
+              : 'Идея сохранена'
+          );
         }
       } else {
         showToast('Ничего не расслышал — попробуйте ещё раз', 'Повторить', () => {
@@ -1329,13 +1789,23 @@
         });
       }
     } catch (err) {
-      console.warn('[asr] transcribe:', err);
-      showToast('Не удалось распознать', 'Повторить', () => {
-        retryQuietTranscription(blob);
-      });
+      if (transcribeCancelled || isCancelledError(err)) {
+        console.info('[asr] распознавание отменено');
+        showToast('Распознавание отменено', 'Повторить', () => {
+          retryQuietTranscription(blob);
+        });
+      } else {
+        console.warn('[asr] transcribe:', err);
+        showToast('Не удалось распознать', 'Повторить', () => {
+          retryQuietTranscription(blob);
+        });
+      }
     } finally {
       isFinishing = false;
       manualStop = false;
+      transcribeCancelled = false;
+      activeTranscribeAbort = null;
+      stopTranscribeTicker();
       releaseWakeLock();
       finishQuietUi();
     }
@@ -1457,6 +1927,7 @@
         ? 'Без писка · текст после «Стоп»'
         : 'Текст по ходу речи · Chrome пищит';
     }
+    updateServerUi();
     checkSupport();
     if (startNow) {
       Promise.resolve(startRecording()).catch((err) => {
@@ -1576,6 +2047,46 @@
       }
       if (els.helpDialog.open) els.helpDialog.close();
       openDialog(els.menuDialog);
+      refreshServerStatus(2500);
+    });
+
+    els.cancelTranscribeBtn.addEventListener('click', cancelTranscription);
+
+    els.serverBtn.addEventListener('click', () => {
+      if (els.menuDialog.open) els.menuDialog.close();
+      if (els.serverUrlInput) els.serverUrlInput.value = serverUrl;
+      serverAvailable = null;
+      updateServerUi();
+      openDialog(els.serverDialog);
+      refreshServerStatus(2500);
+    });
+
+    els.serverCheckBtn.addEventListener('click', () => {
+      refreshServerStatus(2500);
+    });
+
+    els.serverSaveBtn.addEventListener('click', () => {
+      const raw = els.serverUrlInput ? els.serverUrlInput.value : '';
+      const normalized = normalizeServerUrl(raw);
+      if (raw.trim() && !normalized) {
+        if (els.serverStatusText) {
+          els.serverStatusText.textContent =
+            'Адрес не подошёл. Нужен адрес вида https://имя.tail….ts.net';
+        }
+        return;
+      }
+      saveServerUrl(normalized);
+      serverAvailable = null;
+      updateServerUi();
+      showToast(normalized ? 'Компьютер сохранён' : 'Компьютер отключён');
+      if (normalized) refreshServerStatus(2500);
+    });
+
+    els.serverForgetBtn.addEventListener('click', () => {
+      saveServerUrl('');
+      serverAvailable = null;
+      updateServerUi();
+      showToast('Компьютер отключён');
     });
 
     els.helpBtn.addEventListener('click', () => {
@@ -1618,7 +2129,7 @@
       });
     });
 
-    [els.menuDialog, els.helpDialog].forEach((dialog) => {
+    [els.menuDialog, els.helpDialog, els.serverDialog].forEach((dialog) => {
       dialog.addEventListener('click', (e) => {
         if (e.target === dialog) dialog.close();
       });
@@ -1657,6 +2168,7 @@
   /* ---------- запуск ---------- */
 
   function init() {
+    applyServerFromQuery();
     notes = loadNotes();
     render();
     bindEvents();
@@ -1665,6 +2177,7 @@
     els.quietToggleSub.textContent = quietEnabled
       ? 'Без писка · текст после «Стоп»'
       : 'Текст по ходу речи · Chrome пищит';
+    updateServerUi();
     checkSupport();
     if ('serviceWorker' in navigator && window.isSecureContext) {
       window.addEventListener('load', () => {

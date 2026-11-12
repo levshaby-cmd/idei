@@ -1,7 +1,7 @@
 /* Офлайн-оболочка: страница и шрифты открываются без интернета.
    Распознавание речи, конечно, требует связи. */
 
-const CACHE = 'voice-ideas-v7';
+const CACHE = 'voice-ideas-v8';
 const ASR_MODEL_CACHE = 'asr-model-v1';
 const ASR_MODEL_PREFIX =
   'https://huggingface.co/istupakov/gigaam-v3-onnx/resolve/main/';
